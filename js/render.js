@@ -33,7 +33,7 @@ let rotateRollRight = false;
 const moveSpeed = 3;
 const rotateSpeed = 0.005;
 const wFactor = 1;
-const hFactor = 2;
+const hFactor = 1.945;
 let w = window.innerWidth / wFactor;
 let h = w / hFactor;
 
@@ -181,12 +181,19 @@ const models = {
 };
 
 let currentModel = models.ROADSTER;
+const lockedPolarAngle = Math.PI / 2;
+const polarAngleFreedom = Math.PI / 6; // 30 degrees in radians
+const inactivityDelay = 2500; // 5 seconds
+let inactivityTimeout;
 
 function init() {
 	// Scene
 	scene = new THREE.Scene();
 
 	// Camera
+	const mainUI = document.getElementById("main-ui");
+	w = mainUI.clientWidth;
+	h = mainUI.clientHeight;
 	camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 1000);
 	// determine the camera position and rotation based on the currentModel
 	camera.position.set(
@@ -199,6 +206,7 @@ function init() {
 		currentModel.ROTATION.PITCH,
 		currentModel.ROTATION.ROLL
 	);
+	window.loadProgress += 5;
 
 	// Renderer
 	renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -208,7 +216,6 @@ function init() {
 	renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 	// Append renderer to the main-ui div
-	const mainUI = document.getElementById("main-ui");
 	mainUI.appendChild(renderer.domElement);
 
 	// Lights
@@ -260,6 +267,8 @@ function init() {
 	topLight.shadow.camera.far = 500;
 	scene.add(topLight);
 
+	window.loadProgress += 5;
+
 	// Floor
 	const floorGeometry = new THREE.PlaneGeometry(9000, 9000);
 	const floorMaterial = new THREE.MeshStandardMaterial({
@@ -273,6 +282,8 @@ function init() {
 	floor.position.y = currentModel.FLOOR;
 	floor.receiveShadow = true;
 	scene.add(floor);
+
+	window.loadProgress += 5;
 
 	// GLTF Loader
 	const loader = new GLTFLoader();
@@ -301,6 +312,8 @@ function init() {
 		}
 	);
 
+	window.loadProgress += 15;
+
 	// Resize event listener
 	window.addEventListener("resize", onWindowResize, false);
 	document.addEventListener("keydown", onDocumentKeyDown, false);
@@ -309,8 +322,9 @@ function init() {
 }
 
 function onWindowResize() {
-	w = window.innerWidth / wFactor;
-	h = w / hFactor;
+	const mainUI = document.getElementById("main-ui");
+	w = mainUI.clientWidth;
+	h = mainUI.clientHeight;
 	camera.aspect = w / h;
 	camera.updateProjectionMatrix();
 	renderer.setSize(w, h);
@@ -319,16 +333,102 @@ function onWindowResize() {
 	finalComposer.setSize(w, h);
 }
 
+let smoothReset = false;
+
 function initControls() {
 	controls = new OrbitControls(camera, renderer.domElement);
 	controls.enableDamping = true;
-	controls.dampingFactor = 0.2;
+	controls.dampingFactor = 0.05;
+	controls.rotateSpeed = 0.48;
 	controls.enablePan = false;
 	controls.enableRotate = true;
 	controls.enableZoom = false;
-	controls.target.set(currentModel.ORBIT.X, currentModel.ORBIT.Y, currentModel.ORBIT.Z);
-	controls.minPolarAngle = Math.PI / 2; // Lock vertical movement
-	controls.maxPolarAngle = Math.PI / 2; // Lock vertical movement
+	controls.target.set(
+		currentModel.ORBIT.X,
+		currentModel.ORBIT.Y,
+		currentModel.ORBIT.Z
+	);
+	controls.minPolarAngle = lockedPolarAngle - polarAngleFreedom; // Allow freedom upward
+	controls.maxPolarAngle = lockedPolarAngle; // Lock angle at the top position
+
+	controls.addEventListener("start", onStart);
+	controls.addEventListener("end", onEnd);
+}
+
+function onStart(event) {
+	controls.minAzimuthAngle = -Infinity;
+	controls.maxAzimuthAngle = Infinity;
+	controls.minPolarAngle = lockedPolarAngle - polarAngleFreedom; // Allow freedom upward
+	controls.maxPolarAngle = lockedPolarAngle; // Lock angle at the top position
+	smoothReset = false;
+
+	// Clear the inactivity timeout if the user is active
+	clearTimeout(inactivityTimeout);
+}
+
+function onEnd(event) {
+	// Set the inactivity timeout to trigger the reset after 5 seconds of inactivity
+	inactivityTimeout = setTimeout(() => {
+		smoothReset = true;
+	}, inactivityDelay);
+}
+
+function normalizeAngle(angle) {
+	while (angle > Math.PI) angle -= 2 * Math.PI;
+	while (angle < -Math.PI) angle += 2 * Math.PI;
+	return angle;
+}
+
+function doSmoothReset() {
+	const targetAzimuthAngle = normalizeAngle(currentModel.ROTATION.PITCH);
+	const targetPolarAngle = lockedPolarAngle;
+
+	let currentAzimuthAngle = normalizeAngle(controls.getAzimuthalAngle());
+	let currentPolarAngle = controls.getPolarAngle();
+
+	if (Math.abs(currentAzimuthAngle - targetAzimuthAngle) < 0.001) {
+		currentAzimuthAngle = targetAzimuthAngle;
+	}
+
+	if (Math.abs(currentPolarAngle - targetPolarAngle) < 0.001) {
+		currentPolarAngle = targetPolarAngle;
+	}
+
+	const smoothFactor = 0.05;
+	const newAzimuthAngle =
+		currentAzimuthAngle +
+		smoothFactor * (targetAzimuthAngle - currentAzimuthAngle);
+	const newPolarAngle =
+		currentPolarAngle +
+		smoothFactor * (targetPolarAngle - currentPolarAngle);
+
+	controls.minAzimuthAngle = newAzimuthAngle;
+	controls.maxAzimuthAngle = newAzimuthAngle;
+	controls.minPolarAngle = newPolarAngle;
+	controls.maxPolarAngle = newPolarAngle;
+
+	controls.update(); // Update the controls to apply the changes
+
+	if (
+		Math.abs(currentAzimuthAngle - targetAzimuthAngle) < 0.001 &&
+		Math.abs(currentPolarAngle - targetPolarAngle) < 0.001
+	) {
+		onStart();
+		smoothReset = false;
+	}
+}
+
+function animationLoop(t) {
+	if (smoothReset) {
+		doSmoothReset();
+	}
+
+	if (useOrbitControls) {
+		controls.update(); // Update controls in the animation loop
+	} else {
+		updateCamera(); // Update camera for WASD controls
+	}
+	renderer.render(scene, camera);
 }
 
 function darkenNonBloomed(obj) {
@@ -407,12 +507,7 @@ function render() {
 
 function animate() {
 	requestAnimationFrame(animate);
-	if (useOrbitControls) {
-		controls.update(); // Update controls in the animation loop
-	} else {
-		updateCamera(); // Update camera for WASD controls
-	}
-	render();
+	animationLoop();
 }
 
 function updateCamera() {
@@ -556,3 +651,7 @@ function onExportKeyPress(event) {
 init();
 document.addEventListener("keydown", onDocumentKeyDown, false);
 document.addEventListener("keyup", onDocumentKeyUp, false);
+window.loadProgress = 99;
+setTimeout(() => {
+	window.loadProgress += 1;
+}, 500);

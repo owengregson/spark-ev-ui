@@ -17,6 +17,8 @@
 		<meta name="x-ua-compatible" content="ie=edge" />
 		<link href="../css/styles.css" rel="stylesheet" />
 		<link href="../assets/images/favicon.png" rel="icon" type="image/png" />
+		<link rel="preload" href="../js/env.js" as="script">
+		<script src="../js/env.js"></script>
 		<script src="../js/home.js"></script>
 		<script type="importmap">
 			{
@@ -26,6 +28,18 @@
 				}
 			}
 		</script>
+		<script src="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js"></script>
+		<script src="../js/googleInjector.js"></script>
+		<link
+			href="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css"
+			rel="stylesheet"
+		/>
+		<script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-directions/v4.3.1/mapbox-gl-directions.js"></script>
+		<link
+			rel="stylesheet"
+			href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-directions/v4.3.1/mapbox-gl-directions.css"
+			type="text/css"
+		/>
 		<script src="../js/jquery-3.7.1.min.js"></script>
 		<link href="../css/fontawesome/css/fontawesome.css" rel="stylesheet" />
 		<link href="../css/fontawesome/css/brands.css" rel="stylesheet" />
@@ -79,90 +93,116 @@
 						<span class="time" id="time">12:30</span>
 					</div>
 				</div>
-				<div class="flyout-container">
-					<div class="flyout music-flyout">
-						<div class="flyout-content">
-							<div
-								class="flyout-upperSection music-flyout-upperSection"
-							>
-								<div class="music-details">
-									<img
-										src="../assets/images/album-cover.jpeg"
-										alt="Album Art"
-									/>
-									<div class="verticalSongDetails">
-										<span class="song-title"
-											>Song Title</span
-										>
-										<span class="song-artist">Artist</span>
+				<div class="leftSide" id="leftSide">
+					<div class="flyout-container">
+						<div class="flyout music-flyout" id="music-flyout">
+							<div class="flyout-content">
+								<div
+									class="flyout-upperSection music-flyout-upperSection"
+								>
+									<div class="music-details">
+										<img
+											src="../assets/images/album-cover.jpeg"
+											alt="Album Art"
+										/>
+										<div class="verticalSongDetails">
+											<span class="song-title"
+												>Song Title</span
+											>
+											<span class="song-artist"
+												>Artist</span
+											>
+										</div>
+									</div>
+									<div class="music-right">
+										<i
+											class="fas fa-shuffle icon-clickable"
+											data-buttonType="shuffle"
+										></i>
+										<i
+											class="fas fa-repeat icon-clickable"
+											data-buttonType="repeat"
+										></i>
 									</div>
 								</div>
-								<div class="music-right">
+								<div class="horizontal-divider">
+									<div
+										class="progress"
+										style="width: 25%"
+									></div>
+								</div>
+								<div
+									class="flyout-lowerSection music-flyout-lowerSection"
+								>
 									<i
-										class="fas fa-shuffle icon-clickable"
-										data-buttonType="shuffle"
+										class="fas fa-backward-step icon-clickable icon-titleColor"
+										data-buttonType="previous"
 									></i>
 									<i
-										class="fas fa-repeat icon-clickable"
-										data-buttonType="repeat"
+										class="fas fa-pause icon-clickable icon-titleColor"
+										data-buttonType="play"
+									></i>
+									<i
+										class="fas fa-forward-step icon-clickable icon-titleColor"
+										data-buttonType="next"
+									></i>
+									<i
+										class="fas fa-heart icon-clickable"
+										data-buttonType="like"
+									></i>
+									<i
+										class="fas fa-list icon-clickable"
+										data-buttonType="playlist"
+									></i>
+									<i
+										class="fas fa-magnifying-glass icon-clickable"
+										data-buttonType="search-song"
 									></i>
 								</div>
-							</div>
-							<div class="horizontal-divider">
-								<div class="progress" style="width: 25%"></div>
-							</div>
-							<div
-								class="flyout-lowerSection music-flyout-lowerSection"
-							>
-								<i
-									class="fas fa-backward-step icon-clickable icon-titleColor"
-									data-buttonType="previous"
-								></i>
-								<i
-									class="fas fa-pause icon-clickable icon-titleColor"
-									data-buttonType="play"
-								></i>
-								<i
-									class="fas fa-forward-step icon-clickable icon-titleColor"
-									data-buttonType="next"
-								></i>
-								<i
-									class="fas fa-heart icon-clickable"
-									data-buttonType="like"
-								></i>
-								<i
-									class="fas fa-list icon-clickable"
-									data-buttonType="playlist"
-								></i>
-								<i
-									class="fas fa-magnifying-glass icon-clickable"
-									data-buttonType="search-song"
-								></i>
 							</div>
 						</div>
-					</div>
-					<div class="flyout navigation-flyout">
-						<div class="flyout-content">
-							<div
-								class="flyout-upperSection navigation-flyout-upperSection"
-							>
-								<i class="fas fa-magnifying-glass"></i>
-								<span>Navigate</span>
-							</div>
-							<div class="horizontal-divider"></div>
-							<div class="navigation-flyout-lowerSection">
-								<div class="navigation-item">
-									<i class="fas fa-home"></i>
-									<span>Home</span>
+						<div class="flyout navigation-flyout" id="navigation-flyout">
+							<div class="flyout-content">
+								<div
+									class="flyout-upperSection navigation-flyout-upperSection"
+								data-buttonType="open-navigation">
+									<i class="fas fa-magnifying-glass"></i>
+									<span>Navigate</span>
 								</div>
-								<div class="vertical-divider"></div>
-								<div class="navigation-item">
-									<i class="fas fa-briefcase"></i>
-									<span>Work</span>
+								<div class="horizontal-divider"></div>
+								<div class="navigation-flyout-lowerSection">
+									<div class="navigation-item" data-buttonType="navigate-home">
+										<i class="fas fa-home"></i>
+										<span>Home</span>
+									</div>
+									<div class="vertical-divider"></div>
+									<div class="navigation-item" data-buttonType="navigate-work">
+										<i class="fas fa-briefcase"></i>
+										<span>Work</span>
+									</div>
 								</div>
 							</div>
 						</div>
 					</div>
+					<div class="resizerContainer">
+						<div class="resizer" id="resizer"></div>
+					</div>
+				</div>
+				<div class="rightSide" id="rightSide">
+					<div class="upper-flyout-container">
+						<div class="flyout directions-flyout" id="directions-flyout">
+							<div class="flyout-content">
+								<div
+									class="flyout-upperSection navigation-flyout-upperSection"
+								>
+									<i class="fas fa-magnifying-glass"></i>
+									<span>Navigate</span>
+								</div>
+
+							</div>
+						</div>
+					</div>
+					<div class="map" id="map"></div>
 				</div>
 			</div>
 			<div class="home-bar">
@@ -218,5 +258,6 @@
 			</div>
 		</div>
 		<script type="module" src="../js/render.js"></script>
+		<script type="module" src="../js/map.js"></script>
 	</body>
 </html>

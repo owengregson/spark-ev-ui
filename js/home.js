@@ -1,6 +1,9 @@
 let batteryLevel = 100;
+let resizeInterval;
 window.loadProgress = 0;
 window.loadText = "Loading...";
+window.isMapLoaded = false;
+let isResizing = false;
 
 document.addEventListener('keydown', function (event) {
 	if (event.keyCode == 54) {
@@ -305,7 +308,131 @@ function updateStatusBar() {
 	document.getElementById("time").textContent = newTime;
 }
 
+function setLeftSideWidth(newWidth, smooth = false) {
+	const mainUI = document.querySelector(".main-ui");
+	const leftSide = document.querySelector(".leftSide");
+	const rightSide = document.querySelector(".rightSide");
+
+	leftSide.style.width = `${newWidth}px`;
+	rightSide.style.width = `calc(100% - ${newWidth}px)`;
+
+	// check if its below 50%, and set it to 50% if it is
+	if (newWidth < 0.5 * window.innerWidth) {
+		leftSide.style.width = "50%";
+		rightSide.style.width = "50%";
+	}
+
+	const factor =
+		(newWidth - 0.5 * window.innerWidth) / (0.5 * window.innerWidth);
+	const opacity = Math.max(0, factor); // Ensure opacity is not negative
+	document.getElementById("navigation-flyout").style.opacity = opacity;
+
+	let newWidthE = window.navigationFlyoutOriginalWidth; // in vw
+	let newWidthNum = parseFloat(newWidthE);
+	let newWidthPixels = (newWidthNum * window.innerWidth) / 100;
+
+	let newWidthPixelsFactor = newWidthPixels * factor;
+	let newWidthVW = (newWidthPixelsFactor / window.innerWidth) * 100;
+	if (newWidthVW > 100) newWidthVW = 100;
+	if (newWidthVW < 0 || newWidthVW == 0) newWidthVW = 0;
+	document.getElementById(
+		"navigation-flyout"
+	).style.width = `${newWidthVW}vw`;
+	// gradually increase the margin-left of the music-flyout to 1vw
+	let newMarginLeft = 1 - factor;
+	if (newMarginLeft > 1) newMarginLeft = 1;
+	if (newMarginLeft < 0 || newMarginLeft == 0) newMarginLeft = 0;
+	document.getElementById(
+		"music-flyout"
+	).style.marginLeft = `${newMarginLeft}vw`;
+	window.onWindowResize();
+	window.map.resize();
+}
+
+function smoothSetLeftSideWidth(targetWidth, deltaMP = 0.15) {
+	const leftSide = document.querySelector(".leftSide");
+	let currentWidth = leftSide.clientWidth;
+
+	function step() {
+		const delta = (targetWidth - currentWidth) * deltaMP; // Adjust this value to change the speed of the animation
+		currentWidth += delta;
+
+		if (Math.abs(targetWidth - currentWidth) < 1) {
+			currentWidth = targetWidth;
+			setLeftSideWidth(Math.round(currentWidth));
+			clearInterval(resizeInterval); // Stop the interval
+			return;
+		}
+
+		setLeftSideWidth(Math.round(currentWidth));
+	}
+
+	clearInterval(resizeInterval); // Clear any existing interval before starting a new one
+	resizeInterval = setInterval(step, 16); // Run the step function every 16 milliseconds (~60 FPS)
+}
+
+let initialMouseX = 0;
+let initialWidth = 0;
+
+function onMouseDown(e) {
+	isResizing = true;
+	initialMouseX = e.clientX;
+	initialWidth = document.querySelector(".leftSide").clientWidth;
+	document.addEventListener("mousemove", onMouseMove);
+	document.addEventListener("mouseup", onMouseUp);
+}
+
+function onMouseMove(e) {
+	if (isResizing) {
+		const mainUI = document.querySelector(".main-ui");
+		const newWidth = e.clientX - mainUI.offsetLeft;
+		setLeftSideWidth(Math.round(newWidth), false);
+	}
+}
+
+function onMouseUp(e) {
+	if (isResizing) {
+		isResizing = false;
+		const leftSide = document.querySelector(".leftSide");
+		const currentWidth = leftSide.clientWidth;
+		const deltaX = e.clientX - initialMouseX;
+		const deltaVw = (deltaX / window.innerWidth) * 100;
+
+		// Snap points
+		const snapPoint50 = 0.5 * window.innerWidth;
+		const snapPoint100 = window.innerWidth;
+
+		let targetWidth = currentWidth;
+
+		if (deltaVw > 5) {
+			// Right movement
+			targetWidth = snapPoint100;
+		} else if (deltaVw < -5) {
+			// Left movement
+			targetWidth = snapPoint50;
+		} else {
+			// Find the closest snap point
+			targetWidth = [snapPoint50, snapPoint100].reduce((prev, curr) =>
+				Math.abs(curr - currentWidth) < Math.abs(prev - currentWidth)
+					? curr
+					: prev
+			);
+		}
+
+		// Set the width to the target snap point smoothly
+		smoothSetLeftSideWidth(Math.round(targetWidth));
+
+		// Remove the event listeners
+		document.removeEventListener("mousemove", onMouseMove);
+		document.removeEventListener("mouseup", onMouseUp);
+	}
+}
+
 document.addEventListener('DOMContentLoaded', function () {
+	window.navigationFlyoutOriginalWidth =
+		(document.getElementById("navigation-flyout").clientWidth /
+			window.innerWidth) *
+		100;
 	setTimeout(() => {
 		document.querySelector(".loader").style.opacity = 0;
 		document
@@ -315,7 +442,8 @@ document.addEventListener('DOMContentLoaded', function () {
 				document.querySelector(".loadStageTwo").style.display =
 					"inline-block";
 				setTimeout(() => {
-					document.querySelector(".loadStageTwo").style.display = "flex";
+					document.querySelector(".loadStageTwo").style.display =
+						"flex";
 					document.querySelector(".loadStageTwo").style.opacity = 1;
 				}, 50);
 			});
@@ -342,7 +470,29 @@ document.addEventListener('DOMContentLoaded', function () {
 	setInterval(function () {
 		updateStatusBar();
 	}, 500);
+	// Add mouse events for resizer
+	const resizer = document.querySelector(".resizer");
+	resizer.addEventListener("mousedown", onMouseDown, false);
+	addButtonListeners();
 });
+
+function addButtonListeners() {
+	// find all elements on the page with data-buttonType attribute
+	const buttons = document.querySelectorAll("[data-buttonType]");
+	// for each element, add a click event listener and use a switch statement to determine what to do
+	buttons.forEach((button) => {
+		button.addEventListener("click", function () {
+			switch (button.getAttribute("data-buttonType")) {
+				case "open-navigation": {
+					smoothSetLeftSideWidth(0.5 * window.innerWidth);
+				}
+				default: {
+					console.error("Unknown button type");
+				}
+			}
+		});
+	});
+}
 
 function hideLoader() {
 	document.querySelector(".loadStageTwo").style.opacity = 0;

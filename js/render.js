@@ -55,7 +55,7 @@ const models = {
 					Y: 8,
 					Z: -1,
 				},
-				INTENSITY: 7,
+				INTENSITY: 5,
 			},
 			GLOBALILLUMINATION: {
 				POSITION: {
@@ -63,7 +63,7 @@ const models = {
 					Y: 3,
 					Z: 1,
 				},
-				INTENSITY: 7,
+				INTENSITY: 5,
 			},
 			TOPLIGHT: {
 				POSITION: {
@@ -71,7 +71,7 @@ const models = {
 					Y: 5,
 					Z: 0,
 				},
-				INTENSITY: 5,
+				INTENSITY: 3,
 			},
 		},
 		POSITION: {
@@ -181,8 +181,9 @@ const models = {
 };
 
 let currentModel = models.ROADSTER;
-const lockedPolarAngle = Math.PI / 2;
-const polarAngleFreedom = Math.PI / 6; // 30 degrees in radians
+let lockedPolarAngle = Math.PI / 2;
+let polarAngleFreedom = /* 30 degrees above lockedPolarAngle */ (lockedPolarAngle * 41) / 180;
+let desiredResetAngle = normalizeAngle(currentModel.ROTATION.PITCH);
 const inactivityDelay = 2500; // 5 seconds
 let inactivityTimeout;
 
@@ -191,9 +192,9 @@ function init() {
 	scene = new THREE.Scene();
 
 	// Camera
-	const mainUI = document.getElementById("main-ui");
-	w = mainUI.clientWidth;
-	h = mainUI.clientHeight;
+	const leftSide = document.querySelector(".leftSide");
+	w = leftSide.clientWidth;
+	h = leftSide.clientHeight;
 	camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 1000);
 	// determine the camera position and rotation based on the currentModel
 	camera.position.set(
@@ -216,7 +217,7 @@ function init() {
 	renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 	// Append renderer to the main-ui div
-	mainUI.appendChild(renderer.domElement);
+	leftSide.appendChild(renderer.domElement);
 
 	// Lights
 	const theSun = new THREE.DirectionalLight(
@@ -321,16 +322,35 @@ function init() {
 	document.addEventListener("keydown", onExportKeyPress, false); // Add keydown event listener for exporting camera position and rotation
 }
 
+window.onWindowResize = function () {
+	onWindowResize();
+};
+
 function onWindowResize() {
-	const mainUI = document.getElementById("main-ui");
-	w = mainUI.clientWidth;
-	h = mainUI.clientHeight;
+	const leftSide = document.querySelector(".leftSide");
+	w = leftSide.clientWidth;
+	h = leftSide.clientHeight;
 	camera.aspect = w / h;
 	camera.updateProjectionMatrix();
 	renderer.setSize(w, h);
 	composer.setSize(w, h);
 	bloomComposer.setSize(w, h);
 	finalComposer.setSize(w, h);
+	/* Scale Changes */
+	const newSizeX = (1 - (1 - 0.3) * (1 - w / window.innerWidth));
+	const newSizeY = (1 - (1 - 0.3) * (1 - w / window.innerWidth));
+	const newSizeZ = (1 - (1 - 0.3) * (1 - w / window.innerWidth));
+	scene.scale.set(newSizeX, newSizeY, newSizeZ);
+	/* Angle Changes */
+	const newPolarAngle = 1.0;
+	lockedPolarAngle = Math.PI / 2 - (Math.PI / 2 - newPolarAngle) * (1 - w / window.innerWidth);
+	// if the lockedPolarAngle is Math.PI/2, then give it the 41 degrees of freedom above the lockedAngle. Otherwise, the freedom is zero.
+	polarAngleFreedom = lockedPolarAngle === Math.PI / 2 ? (lockedPolarAngle * 41) / 180 : 0;
+	controls.minPolarAngle = lockedPolarAngle - polarAngleFreedom; // Allow freedom upward
+	controls.maxPolarAngle = lockedPolarAngle; // Lock angle at the top position
+
+	
+	controls.update();
 }
 
 let smoothReset = false;
@@ -338,7 +358,7 @@ let smoothReset = false;
 function initControls() {
 	controls = new OrbitControls(camera, renderer.domElement);
 	controls.enableDamping = true;
-	controls.dampingFactor = 0.05;
+	controls.dampingFactor = 0.07;
 	controls.rotateSpeed = 0.48;
 	controls.enablePan = false;
 	controls.enableRotate = true;
@@ -379,8 +399,8 @@ function normalizeAngle(angle) {
 	return angle;
 }
 
-function doSmoothReset() {
-	const targetAzimuthAngle = normalizeAngle(currentModel.ROTATION.PITCH);
+function doSmoothReset(desiredAngle) {
+	const targetAzimuthAngle = desiredAngle;
 	const targetPolarAngle = lockedPolarAngle;
 
 	let currentAzimuthAngle = normalizeAngle(controls.getAzimuthalAngle());
@@ -420,7 +440,7 @@ function doSmoothReset() {
 
 function animationLoop(t) {
 	if (smoothReset) {
-		doSmoothReset();
+		doSmoothReset(desiredResetAngle);
 	}
 
 	if (useOrbitControls) {
@@ -475,20 +495,20 @@ function initPostProcessing() {
 				bloomTexture: { value: bloomComposer.renderTarget2.texture },
 			},
 			vertexShader: `
-				varying vec2 vUv;
-				void main() {
-					vUv = uv;
-					gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-				}
-			`,
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
 			fragmentShader: `
-				uniform sampler2D baseTexture;
-				uniform sampler2D bloomTexture;
-				varying vec2 vUv;
-				void main() {
-					gl_FragColor = (texture2D(baseTexture, vUv) + vec4(1.0) * texture2D(bloomTexture, vUv));
-				}
-			`,
+                uniform sampler2D baseTexture;
+                uniform sampler2D bloomTexture;
+                varying vec2 vUv;
+                void main() {
+                    gl_FragColor = (texture2D(baseTexture, vUv) + vec4(1.0) * texture2D(bloomTexture, vUv));
+                }
+            `,
 			blending: THREE.AdditiveBlending,
 			transparent: true,
 		}),
@@ -651,7 +671,12 @@ function onExportKeyPress(event) {
 init();
 document.addEventListener("keydown", onDocumentKeyDown, false);
 document.addEventListener("keyup", onDocumentKeyUp, false);
-window.loadProgress = 99;
-setTimeout(() => {
-	window.loadProgress += 1;
-}, 500);
+let mapChecker = setInterval(() => {
+	if (window.isMapLoaded && window.map.isStyleLoaded()) {
+		clearInterval(mapChecker);
+		window.loadProgress = 99;
+		setTimeout(() => {
+			window.loadProgress += 1;
+		}, 500);
+	}
+}, 5);

@@ -27,7 +27,6 @@ class Location {
 	}
 }
 let map;
-const googleMapsAPIKey = "AIzaSyAoEXbxW1Grn9p6zg9TveWE0EYr9j6-aCE";
 let currentPosition = new Location(0, 0);
 let currentPositionMarker;
 let routeCoordinates = [];
